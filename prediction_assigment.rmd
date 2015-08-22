@@ -1,0 +1,113 @@
+---
+title: "Prediction Assignment"
+author: "Chua Wee Young"
+date: "Friday, August 21, 2015"
+output: html_document
+---
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+# datasets
+
+```{r}
+require(data.table)
+training_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+training_data <- read.csv(url(training_url), na.strings=c("", "NA"))
+
+testing_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+testing_data <- read.csv(url(testing_url), na.strings=c("", "NA"))
+```
+
+# cleansing
+```{r}
+NAs <- apply(training_data,2,function(x) {sum(is.na(x))})
+training_data <- training_data[,which(NAs == 0)]
+training_data   <- training_data[,-c(1:7)]
+testing_data <- testing_data[,-c(1:7)]
+
+
+```
+
+Split the dataset into a 60% training and 40% probing dataset.
+```{r}
+library(lattice)
+library(ggplot2)
+library(caret)
+set.seed(13)
+trainIndex <- createDataPartition(y = training_data$classe, p=0.6,list=FALSE);
+train_data <- training_data[trainIndex,];
+test_data <- training_data[-trainIndex, ]
+```
+
+Retrieve the dimensions / head
+
+```{r}
+dim(train_data)
+dim(test_data)
+#head(train_data)
+#head(test_data)
+```
+
+# Recursive Partitioning and Regression Trees
+```{r}
+library(rpart)
+library(rpart.plot)
+train_model <- rpart(classe ~ ., data=train_data, method="class")
+
+rpart.plot(train_model)
+
+train_prediction <- predict(train_model, test_data, type = "class")
+
+library(e1071)
+# Test results on our subTesting data set:
+confusionMatrix(test_data$classe, train_prediction)
+
+```
+
+Accuracy is only at 0.7377 and the error rate would be 0.2623
+
+# Random Forest
+```{r}
+library(randomForest)
+train_random_forest <- randomForest(classe ~. , data=train_data)
+
+train_random_forest_prediction <- predict(train_random_forest, test_data, type = "class")
+
+# Test results on our subTesting data set:
+confusionMatrix(test_data$classe, train_random_forest_prediction)
+
+```
+
+Accuracy is at 0.9946, much better than the recursive partitioning. Error rate would be 0.0054
+
+Now, let's cross validate the performance against the held out set 
+```{r}
+
+train_random_forest_test <- randomForest(classe ~. , data=test_data)
+
+train_random_forest_test_prediction <- predict(train_random_forest_test, test_data, type = "class")
+
+# Test results on our subTesting data set:
+confusionMatrix(test_data$classe, train_random_forest_test_prediction)
+```
+
+# Submission
+```{r}
+library(MASS)
+
+assignment_prediction <- predict(train_random_forest, testing_data, type = "class")
+
+pml_write_files  = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files (assignment_prediction)
+```
+
+
